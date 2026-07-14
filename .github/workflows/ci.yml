@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint / typecheck / test / build (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint & format check (biome)
+        run: pnpm lint
+
+      - name: Typecheck (tsc)
+        run: pnpm typecheck
+
+      - name: Unit tests + coverage
+        run: pnpm test:coverage
+
+      - name: Build (ESM + CJS + types)
+        run: pnpm build:check
+
+      - name: Validate package exports (publint + are-the-types-wrong)
+        run: pnpm check:exports
+
+      - name: Bundle-size guardrail (size-limit)
+        run: pnpm size
+
+      - name: Examples smoke test
+        run: pnpm examples
+
+      - name: Upload coverage report
+        if: matrix.node == 22
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
+
+  bench:
+    name: Benchmarks (smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Runs the benchmark suite once so a perf-path regression that throws is
+      # caught in CI. Numbers are informational (not asserted) — see the run log.
+      - run: pnpm bench

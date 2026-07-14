@@ -119,8 +119,9 @@ describe('ThemeEngine', () => {
 
       const jsonMatch = code.match(/mermaid\.initialize\(([\s\S]+)\);/);
       expect(jsonMatch).toBeTruthy();
+      if (!jsonMatch) throw new Error('init code did not match expected shape');
 
-      const config = JSON.parse(jsonMatch![1]);
+      const config = JSON.parse(jsonMatch[1]);
       expect(config.theme).toBe('dark');
     });
   });

@@ -28,7 +28,7 @@ function updatePackageJson(version: string) {
   packageJson.version = version;
   fs.writeFileSync(
     packageJsonPath,
-    JSON.stringify(packageJson, null, 2) + '\n',
+    `${JSON.stringify(packageJson, null, 2)}\n`,
     'utf-8',
   );
 }
@@ -41,9 +41,12 @@ function main() {
 
   updatePackageJson(version);
 
-  execSync('tsup src/index.ts --format cjs,esm --dts --clean', {
-    stdio: 'inherit',
-  });
+  execSync(
+    'tsup src/index.ts --format cjs,esm --dts --clean --tsconfig tsconfig.build.json',
+    {
+      stdio: 'inherit',
+    },
+  );
 
   console.log(`✓ Build complete: v${version}`);
 }

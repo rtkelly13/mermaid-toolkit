@@ -1,0 +1,54 @@
+name: Release
+
+# Manual, human-gated publish to npm. Trigger from the Actions tab
+# ("Run workflow"). Requires an `NPM_TOKEN` repo secret (an npm automation
+# token with publish rights to the @rtkelly scope).
+#
+# `id-token: write` + publishConfig.provenance enable npm provenance, so the
+# published package is cryptographically linked to this workflow run.
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Pack and validate only — do not publish'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Quality gates (lint, typecheck, test, build, exports, size)
+        run: pnpm run ci
+
+      - name: Publish (dry run)
+        if: ${{ inputs.dry-run }}
+        run: pnpm publish --no-git-checks --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish
+        if: ${{ !inputs.dry-run }}
+        run: pnpm publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

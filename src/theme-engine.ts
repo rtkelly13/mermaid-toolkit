@@ -89,7 +89,8 @@ export class ThemeEngine {
     if (!this.config.themeVariables) {
       this.config.themeVariables = {};
     }
-    (this.config.themeVariables as any)[key] = value;
+    (this.config.themeVariables as Record<string, string | boolean>)[key] =
+      value;
   }
 
   setFlowchartConfig(config: MermaidConfig['flowchart']): void {

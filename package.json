@@ -2,15 +2,23 @@
   "name": "@rtkelly/mermaid-toolkit",
   "version": "0.0.1",
   "description": "Professional Mermaid.js theme engine with ASCII rendering",
+  "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
-    }
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -19,11 +27,21 @@
   ],
   "scripts": {
     "build": "tsx scripts/build.ts",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
-    "test": "vitest",
-    "test:watch": "vitest --watch",
+    "build:check": "tsup src/index.ts --format cjs,esm --dts --clean --tsconfig tsconfig.build.json",
+    "prepare": "pnpm build:check",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch --tsconfig tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "bench": "vitest bench --run",
     "lint": "biome check .",
+    "lint:fix": "biome check --write .",
     "format": "biome format --write .",
+    "check:exports": "publint --strict && attw --pack .",
+    "size": "size-limit",
+    "examples": "tsx examples/index.ts",
+    "ci": "pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build:check && pnpm check:exports && pnpm size",
     "prepublishOnly": "pnpm build"
   },
   "keywords": [
@@ -45,17 +63,57 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rtkelly13/mermaid-toolkit"
+    "url": "git+https://github.com/rtkelly13/mermaid-toolkit.git"
   },
+  "homepage": "https://github.com/rtkelly13/mermaid-toolkit#readme",
+  "bugs": {
+    "url": "https://github.com/rtkelly13/mermaid-toolkit/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.33.0",
   "peerDependencies": {
     "mermaid": "^11.0.0"
   },
+  "peerDependenciesMeta": {
+    "mermaid": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@biomejs/biome": "^2.5.3",
+    "@size-limit/preset-small-lib": "^12.1.0",
     "@types/node": "^22.10.5",
+    "@vitest/coverage-v8": "4.0.17",
     "mermaid": "^11.12.2",
+    "publint": "^0.3.21",
+    "size-limit": "^12.1.0",
     "tsup": "^8.3.5",
     "tsx": "^4.21.0",
     "typescript": "^5.7.3",
     "vitest": "^4.0.17"
+  },
+  "size-limit": [
+    {
+      "name": "ESM (import)",
+      "path": "dist/index.mjs",
+      "limit": "6 kB"
+    },
+    {
+      "name": "CJS (require)",
+      "path": "dist/index.js",
+      "limit": "6 kB"
+    }
+  ],
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
