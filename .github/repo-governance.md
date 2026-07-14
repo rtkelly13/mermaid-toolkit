@@ -1,11 +1,24 @@
 # Repository governance
 
 The merge policy is: **PRs only, linear history, and a green `PR checks` gate**,
-with **auto-merge** so an approved PR merges itself once CI is green.
+with **auto-merge** so a PR merges itself once CI is green.
 
-These are GitHub *server* settings, not repo files, so they must be applied once
-by a repo admin. Two equivalent routes are below — the `gh` script (fastest) and
-the UI (no CLI needed). The workflow side (`ci.yml`) is already in the repo.
+These are GitHub *server* settings, not repo files, so a repo admin applies them
+once. The workflow side (`ci.yml`) is already in the repo.
+
+## Apply it
+
+Run the self-contained, idempotent script (needs `gh`, authenticated as an admin):
+
+```bash
+./scripts/setup-repo-governance.sh                # rtkelly13/mermaid-toolkit
+./scripts/setup-repo-governance.sh owner/repo     # or another repo
+```
+
+It enables auto-merge + squash/rebase-only merges + branch auto-delete, then
+creates (or updates) the `main` branch ruleset. The ruleset JSON is inlined in
+the script, so it is the single source of truth — re-run it any time to reset
+the policy.
 
 ## What gets enforced
 
@@ -22,43 +35,14 @@ the UI (no CLI needed). The workflow side (`ci.yml`) is already in the repo.
 lint/test/build matrix, the consumer usage check, and benchmarks. Requiring that
 one context means adding or dropping a Node version never needs a rule edit.
 
-## Option A — apply with `gh` (run from a machine with admin + network)
-
-```bash
-gh auth status   # must be an admin of rtkelly13/mermaid-toolkit
-
-# 1. Repo merge settings: enable auto-merge, keep history linear (no merge commits).
-gh api -X PATCH repos/rtkelly13/mermaid-toolkit \
-  -F allow_auto_merge=true \
-  -F allow_squash_merge=true \
-  -F allow_rebase_merge=true \
-  -F allow_merge_commit=false \
-  -F delete_branch_on_merge=true
-
-# 2. Branch ruleset (linear history + required PR + required "PR checks").
-gh api -X POST repos/rtkelly13/mermaid-toolkit/rulesets \
-  --input .github/rulesets/main.json
-```
-
-To update the ruleset later, find its id with
-`gh api repos/rtkelly13/mermaid-toolkit/rulesets` and
-`PUT .../rulesets/<id> --input .github/rulesets/main.json`.
-
-## Option B — apply in the UI
-
-1. **Settings → General → Pull Requests**: tick *Allow squash merging* and
-   *Allow rebase merging*, untick *Allow merge commits*, tick *Allow auto-merge*
-   and *Automatically delete head branches*.
-2. **Settings → Rules → Rulesets → New ruleset → Import a ruleset** → choose
-   `.github/rulesets/main.json` → set enforcement to *Active* → **Create**.
+The script keeps an admin bypass on the ruleset so you can't lock yourself out;
+remove the `bypass_actors` entry in the script for strict enforcement.
 
 ## Using auto-merge
-
-Once the repo setting is on, enable it per PR:
 
 ```bash
 gh pr merge <number> --squash --auto
 ```
 
 The PR then merges automatically the moment `PR checks` is green and the branch
-is up to date — no manual button press.
+is up to date.
