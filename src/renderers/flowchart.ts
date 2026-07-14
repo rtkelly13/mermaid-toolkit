@@ -5,12 +5,7 @@ export class FlowchartRenderer {
   private grid: Grid;
   private layout: FlowchartLayout;
 
-  constructor(
-    private chars: BoxChars,
-    private paddingX: number = 5,
-    private paddingY: number = 5,
-    private borderPadding: number = 1,
-  ) {
+  constructor(chars: BoxChars, paddingX = 5, paddingY = 5, borderPadding = 1) {
     this.grid = new Grid(chars);
     this.layout = new FlowchartLayout(paddingX, paddingY, borderPadding);
   }

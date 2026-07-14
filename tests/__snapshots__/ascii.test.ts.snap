@@ -1,0 +1,7 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`mermaidToAscii > produces a stable golden rendering for a known diagram 1`] = `
+"+-------+     +--------+
+| Start |-----> Middle |
++-------+     +--------+"
+`;

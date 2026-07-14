@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint / typecheck / test / build (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint & format check (biome)
+        run: pnpm lint
+
+      - name: Typecheck (tsc)
+        run: pnpm typecheck
+
+      - name: Unit tests + coverage
+        run: pnpm test:coverage
+
+      - name: Build (ESM + CJS + types)
+        run: pnpm build:check
+
+      - name: Validate package exports (publint + are-the-types-wrong)
+        run: pnpm check:exports
+
+      - name: Bundle-size guardrail (size-limit)
+        run: pnpm size
+
+      - name: Examples smoke test
+        run: pnpm examples
+
+      - name: Upload coverage report
+        if: matrix.node == 22
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
+
+  usage:
+    name: Consumer usage check (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Pack the real publish artifact and install it into a throwaway project,
+      # exactly as a downstream consumer would — this exercises the exports map
+      # (ESM import + CJS require) against the built dist, not the source.
+      - name: Pack tarball
+        run: |
+          pnpm build:check
+          echo "TARBALL=$(pnpm pack | tail -1)" >> "$GITHUB_ENV"
+
+      - name: Install tarball into a clean project
+        run: |
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          npm init -y >/dev/null
+          npm install "$GITHUB_WORKSPACE/$TARBALL"
+
+      - name: Import as ESM
+        working-directory: /tmp/consumer
+        run: |
+          cat > esm.mjs <<'EOF'
+          import { mermaidToAscii, ThemeEngine } from '@rtkelly/mermaid-toolkit';
+          const out = mermaidToAscii('graph LR\n A[Hi] --> B[There]');
+          if (!out.includes('Hi') || !out.includes('There')) throw new Error('ESM render failed');
+          if (!ThemeEngine.fromPreset('dark')) throw new Error('ESM ThemeEngine failed');
+          console.log('ESM import OK');
+          EOF
+          node esm.mjs
+
+      - name: Require as CJS
+        working-directory: /tmp/consumer
+        run: |
+          cat > cjs.cjs <<'EOF'
+          const { mermaidToAscii } = require('@rtkelly/mermaid-toolkit');
+          const out = mermaidToAscii('graph LR\n A[Hi] --> B[There]', { asciiOnly: true });
+          if (!out.includes('Hi')) throw new Error('CJS render failed');
+          console.log('CJS require OK');
+          EOF
+          node cjs.cjs
+
+  bench:
+    name: Benchmarks (smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Runs the benchmark suite once so a perf-path regression that throws is
+      # caught in CI. Numbers are informational (not asserted) — see the run log.
+      - run: pnpm bench
+
+  # Single required status check to gate merges on. Branch protection requires
+  # just "PR checks" instead of every matrix leg, so adding/removing a Node
+  # version never needs a protection-rule edit. Fails if any dependency failed
+  # or was cancelled/skipped.
+  pr-checks:
+    name: PR checks
+    if: always()
+    needs: [check, usage, bench]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required jobs succeeded
+        run: |
+          echo "check=${{ needs.check.result }}"
+          echo "usage=${{ needs.usage.result }}"
+          echo "bench=${{ needs.bench.result }}"
+          if [ "${{ needs.check.result }}" != "success" ] \
+            || [ "${{ needs.usage.result }}" != "success" ] \
+            || [ "${{ needs.bench.result }}" != "success" ]; then
+            echo "::error::One or more required jobs did not succeed."
+            exit 1
+          fi
+          echo "All required jobs succeeded."
